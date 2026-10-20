@@ -1,4 +1,4 @@
-package com.mba.fastdownloader
+package com.mba.fastdownloader.mba_fast_downloader
 
 import android.content.Intent
 import android.os.Bundle
