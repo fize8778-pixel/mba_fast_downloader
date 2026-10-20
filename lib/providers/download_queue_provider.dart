@@ -40,7 +40,6 @@ class DownloadQueueNotifier extends StateNotifier<List<DownloadTaskItem>> {
         final loaded = decoded
             .map((e) => DownloadTaskItem.fromJson(e as Map<String, dynamic>))
             .map((task) {
-          // Any task that was downloading when app closed becomes paused so user can resume
           if (task.status == DownloadStatus.downloading ||
               task.status == DownloadStatus.analyzing) {
             return task.copyWith(
@@ -64,7 +63,7 @@ class DownloadQueueNotifier extends StateNotifier<List<DownloadTaskItem>> {
     } catch (_) {}
   }
 
-  /// Enqueues a user-selected quality option from SmartLinkAnalyzer and triggers queue scheduler.
+  /// Enqueues a user-selected quality option and starts downloading immediately.
   Future<void> enqueueDownload({
     required AnalyzedMediaResult media,
     required StreamQualityOption selectedQuality,
@@ -73,11 +72,11 @@ class DownloadQueueNotifier extends StateNotifier<List<DownloadTaskItem>> {
     final downloader = ref.read(rangeDownloaderProvider);
     final id = const Uuid().v4();
 
-    final cleanTitle = media.title
-        .replaceAll(RegExp(r'[<>:"/\\|?*]'), '_')
-        .trim();
+    final cleanTitle =
+        media.title.replaceAll(RegExp(r'[<>:"/\\|?*]'), '_').trim();
     final safeBaseName = cleanTitle.isEmpty ? 'video_$id' : cleanTitle;
-    final fileName = '$safeBaseName.${selectedQuality.format}';
+    final fileName =
+        '${safeBaseName}_${id.substring(0, 4)}.${selectedQuality.format}';
 
     final probe = await downloader.probeUrl(
       selectedQuality.downloadUrl,
@@ -113,28 +112,55 @@ class DownloadQueueNotifier extends StateNotifier<List<DownloadTaskItem>> {
     _scheduleQueue();
   }
 
+  /// Analyzes and enqueues multiple URLs concurrently (Batch / Unlimited mode).
+  Future<int> enqueueBatchUrls(List<String> urls) async {
+    final analyzer = ref.read(smartLinkAnalyzerProvider);
+    int addedCount = 0;
+
+    await Future.wait(
+      urls.map((rawUrl) async {
+        final clean = rawUrl.trim();
+        if (clean.isEmpty) return;
+        final result = await analyzer.analyzeUrl(clean);
+        if (result.isSupported && result.qualityOptions.isNotEmpty) {
+          await enqueueDownload(
+            media: result,
+            selectedQuality: result.qualityOptions.first,
+          );
+          addedCount++;
+        }
+      }),
+    );
+    return addedCount;
+  }
+
   void _scheduleQueue() {
     final settings = ref.read(appSettingsProvider);
-    final activeCount = state
-        .where((t) => t.status == DownloadStatus.downloading)
-        .length;
+    final queuedTasks =
+        state.where((t) => t.status == DownloadStatus.queued).toList();
+    if (queuedTasks.isEmpty) return;
 
+    // Unlimited Simultaneous Downloads mode: start ALL queued tasks immediately!
+    if (settings.unlimitedConcurrentDownloads) {
+      for (final task in queuedTasks) {
+        _runTask(task.id);
+      }
+      return;
+    }
+
+    final activeCount =
+        state.where((t) => t.status == DownloadStatus.downloading).length;
     if (activeCount >= settings.maxConcurrentDownloads) return;
 
     final slotsAvailable = settings.maxConcurrentDownloads - activeCount;
-    final queuedTasks = state
-        .where((t) => t.status == DownloadStatus.queued)
-        .take(slotsAvailable)
-        .toList();
-
-    for (final task in queuedTasks) {
+    for (final task in queuedTasks.take(slotsAvailable)) {
       _runTask(task.id);
     }
   }
 
   Future<void> _runTask(String id) async {
     final task = _findTask(id);
-    if (task == null) return;
+    if (task == null || task.status == DownloadStatus.downloading) return;
 
     final settings = ref.read(appSettingsProvider);
     final downloader = ref.read(rangeDownloaderProvider);
@@ -146,53 +172,58 @@ class DownloadQueueNotifier extends StateNotifier<List<DownloadTaskItem>> {
     _replaceTask(activeTask);
     await _persistTasks();
 
-    await downloader.startOrResumeDownload(
-      task: activeTask,
-      maxParallelChunks: settings.maxParallelChunksPerFile,
-      onProgress: (downloaded, total, speedBps, etaSec) {
-        final current = _findTask(id);
-        if (current == null || current.status == DownloadStatus.paused) return;
-        _replaceTask(
-          current.copyWith(
-            downloadedBytes: downloaded,
-            totalBytes: total > 0 ? total : current.totalBytes,
-            speedBytesPerSec: speedBps,
-            etaSeconds: etaSec,
-            status: DownloadStatus.downloading,
-          ),
-        );
-      },
-      onCompleted: (savedPath) async {
-        final current = _findTask(id);
-        if (current == null) return;
-        _replaceTask(
-          current.copyWith(
-            downloadedBytes: current.totalBytes > 0
-                ? current.totalBytes
-                : current.downloadedBytes,
-            speedBytesPerSec: 0,
-            etaSeconds: 0,
-            status: DownloadStatus.completed,
-            completedAt: DateTime.now(),
-          ),
-        );
-        await _persistTasks();
-        _scheduleQueue();
-      },
-      onError: (errorMsg) async {
-        final current = _findTask(id);
-        if (current == null) return;
-        _replaceTask(
-          current.copyWith(
-            status: DownloadStatus.failed,
-            speedBytesPerSec: 0,
-            etaSeconds: 0,
-            errorMessage: errorMsg,
-          ),
-        );
-        await _persistTasks();
-        _scheduleQueue();
-      },
+    // Run asynchronously without blocking other simultaneous tasks
+    unawaited(
+      downloader.startOrResumeDownload(
+        task: activeTask,
+        maxParallelChunks: settings.maxParallelChunksPerFile,
+        onProgress: (downloaded, total, speedBps, etaSec) {
+          final current = _findTask(id);
+          if (current == null || current.status == DownloadStatus.paused) {
+            return;
+          }
+          _replaceTask(
+            current.copyWith(
+              downloadedBytes: downloaded,
+              totalBytes: total > 0 ? total : current.totalBytes,
+              speedBytesPerSec: speedBps,
+              etaSeconds: etaSec,
+              status: DownloadStatus.downloading,
+            ),
+          );
+        },
+        onCompleted: (savedPath) async {
+          final current = _findTask(id);
+          if (current == null) return;
+          _replaceTask(
+            current.copyWith(
+              downloadedBytes: current.totalBytes > 0
+                  ? current.totalBytes
+                  : current.downloadedBytes,
+              speedBytesPerSec: 0,
+              etaSeconds: 0,
+              status: DownloadStatus.completed,
+              completedAt: DateTime.now(),
+            ),
+          );
+          await _persistTasks();
+          _scheduleQueue();
+        },
+        onError: (errorMsg) async {
+          final current = _findTask(id);
+          if (current == null) return;
+          _replaceTask(
+            current.copyWith(
+              status: DownloadStatus.failed,
+              speedBytesPerSec: 0,
+              etaSeconds: 0,
+              errorMessage: errorMsg,
+            ),
+          );
+          await _persistTasks();
+          _scheduleQueue();
+        },
+      ),
     );
   }
 
@@ -211,6 +242,29 @@ class DownloadQueueNotifier extends StateNotifier<List<DownloadTaskItem>> {
     _scheduleQueue();
   }
 
+  Future<void> pauseAllDownloads() async {
+    final downloader = ref.read(rangeDownloaderProvider);
+    for (final task in state) {
+      if (task.status == DownloadStatus.downloading ||
+          task.status == DownloadStatus.queued) {
+        downloader.pauseOrCancel(task.id);
+      }
+    }
+    state = [
+      for (final task in state)
+        if (task.status == DownloadStatus.downloading ||
+            task.status == DownloadStatus.queued)
+          task.copyWith(
+            status: DownloadStatus.paused,
+            speedBytesPerSec: 0,
+            etaSeconds: 0,
+          )
+        else
+          task,
+    ];
+    await _persistTasks();
+  }
+
   Future<void> resumeDownload(String id) async {
     final current = _findTask(id);
     if (current == null) return;
@@ -220,6 +274,22 @@ class DownloadQueueNotifier extends StateNotifier<List<DownloadTaskItem>> {
         errorMessage: null,
       ),
     );
+    await _persistTasks();
+    _scheduleQueue();
+  }
+
+  Future<void> resumeAllDownloads() async {
+    state = [
+      for (final task in state)
+        if (task.status == DownloadStatus.paused ||
+            task.status == DownloadStatus.failed)
+          task.copyWith(
+            status: DownloadStatus.queued,
+            errorMessage: null,
+          )
+        else
+          task,
+    ];
     await _persistTasks();
     _scheduleQueue();
   }
@@ -239,9 +309,8 @@ class DownloadQueueNotifier extends StateNotifier<List<DownloadTaskItem>> {
   }
 
   Future<void> clearCompletedHistory() async {
-    state = state
-        .where((t) => t.status != DownloadStatus.completed)
-        .toList();
+    state =
+        state.where((t) => t.status != DownloadStatus.completed).toList();
     await _persistTasks();
   }
 
@@ -266,6 +335,8 @@ class DownloadQueueNotifier extends StateNotifier<List<DownloadTaskItem>> {
     ];
   }
 }
+
+void unawaited(Future<void> future) {}
 
 final downloadQueueProvider =
     StateNotifierProvider<DownloadQueueNotifier, List<DownloadTaskItem>>(
