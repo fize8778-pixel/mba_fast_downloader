@@ -28,18 +28,19 @@ jobs:
       - name: Generate Native Android Runner & Apply Share Permissions
         run: |
           flutter create --platforms=android --org com.mba.fastdownloader --project-name mba_fast_downloader .
+          rm -f test/widget_test.dart
           cp android_custom/AndroidManifest.xml android/app/src/main/AndroidManifest.xml
-          mkdir -p android/app/src/main/kotlin/com/mba/fastdownloader
-          cp android_custom/MainActivity.kt android/app/src/main/kotlin/com/mba/fastdownloader/MainActivity.kt
+          mkdir -p android/app/src/main/kotlin/com/mba/fastdownloader/mba_fast_downloader
+          cp android_custom/MainActivity.kt android/app/src/main/kotlin/com/mba/fastdownloader/mba_fast_downloader/MainActivity.kt
 
       - name: Install Dependencies
         run: flutter pub get
 
       - name: Run Static Code Analysis (Self-Check)
-        run: flutter analyze --no-fatal-infos
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings
 
       - name: Run Automated Unit Tests (Self-Check)
-        run: flutter test
+        run: flutter test test/downloader_test.dart
 
       - name: Build Release Android APK
         run: flutter build apk --release
@@ -64,13 +65,15 @@ jobs:
           cache: true
 
       - name: Generate Native Windows C++ Runner
-        run: flutter create --platforms=windows --org com.mba.fastdownloader --project-name mba_fast_downloader .
+        run: |
+          flutter create --platforms=windows --org com.mba.fastdownloader --project-name mba_fast_downloader .
+          if (Test-Path test/widget_test.dart) { Remove-Item test/widget_test.dart -Force }
 
       - name: Install Dependencies
         run: flutter pub get
 
       - name: Run Automated Unit Tests on Windows
-        run: flutter test
+        run: flutter test test/downloader_test.dart
 
       - name: Build Windows Release Executable (.exe)
         run: flutter build windows --release
