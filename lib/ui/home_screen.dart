@@ -7,6 +7,71 @@ import '../providers/settings_provider.dart';
 import '../services/ffmpeg_and_share_service.dart';
 import '../services/site_adapters.dart';
 
+/// Professional custom vector-style App Icon widget matching MBA Fast Downloader's launcher icon:
+/// Deep emerald-teal & navy squircle with glowing cyan rim, download arrow, play triangle & golden bolt.
+class MbaBrandLogoIcon extends StatelessWidget {
+  final double size;
+  const MbaBrandLogoIcon({super.key, this.size = 38});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(size * 0.26),
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Color(0xFF00695C),
+            Color(0xFF00363A),
+            Color(0xFF06162E),
+          ],
+        ),
+        border: Border.all(
+          color: const Color(0xFF00E5FF),
+          width: (size * 0.045).clamp(1.2, 2.5),
+        ),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x4000E5FF),
+            blurRadius: 6,
+            offset: Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          Icon(
+            Icons.download_rounded,
+            color: const Color(0xFF00E5FF),
+            size: size * 0.68,
+          ),
+          Positioned(
+            top: size * 0.14,
+            child: Icon(
+              Icons.play_arrow_rounded,
+              color: const Color(0xFFFFD54F),
+              size: size * 0.30,
+            ),
+          ),
+          Positioned(
+            right: size * 0.08,
+            bottom: size * 0.10,
+            child: Icon(
+              Icons.bolt_rounded,
+              color: const Color(0xFFFFC107),
+              size: size * 0.42,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
 
@@ -88,13 +153,48 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   }
 
   Future<void> _analyzeLink() async {
-    final url = _urlController.text.trim();
-    if (url.isEmpty) {
+    final rawText = _urlController.text.trim();
+    if (rawText.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('براہِ کرم پہلے ویڈیو یا فائل کا لنک پیسٹ کریں۔'),
+          content: Text(
+            'براہِ کرم پہلے ویڈیو یا فائل کا لنک پیسٹ کریں۔',
+            textDirection: TextDirection.rtl,
+          ),
         ),
       );
+      return;
+    }
+
+    // Check if user pasted multiple URLs at once for simultaneous batch downloading
+    final allUrls = RegExp(r'https?://[^\s"]+')
+        .allMatches(rawText)
+        .map((m) => m.group(0)!)
+        .toList();
+
+    if (allUrls.length > 1) {
+      setState(() {
+        _isAnalyzing = true;
+        _analyzedMedia = null;
+      });
+      final added = await ref
+          .read(downloadQueueProvider.notifier)
+          .enqueueBatchUrls(allUrls);
+      if (!mounted) return;
+      setState(() {
+        _isAnalyzing = false;
+      });
+      if (added > 0) {
+        _urlController.clear();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'ایک ساتھ $added ویڈیوز کی ڈاؤن لوڈنگ شروع کر دی گئی ہے!',
+              textDirection: TextDirection.rtl,
+            ),
+          ),
+        );
+      }
       return;
     }
 
@@ -104,7 +204,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     });
 
     final analyzer = ref.read(smartLinkAnalyzerProvider);
-    final result = await analyzer.analyzeUrl(url);
+    final result = await analyzer.analyzeUrl(rawText);
 
     if (!mounted) return;
     setState(() {
@@ -127,8 +227,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
           ),
           title: const Row(
             children: [
-              Icon(Icons.bolt_rounded, color: Colors.amber, size: 28),
-              SizedBox(width: 8),
+              MbaBrandLogoIcon(size: 40),
+              SizedBox(width: 12),
               Expanded(
                 child: Text(
                   'MBA Fast Downloader',
@@ -142,7 +242,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'تیز رفتار، اشتہارات سے پاک (100% Ad-Free) ملٹی پلیٹ فارم ویڈیو اور فائل ڈاؤن لوڈر برائے ونڈوز اور اینڈرائیڈ۔',
+                'تیز رفتار، اشتہارات سے پاک اور لا محدود بیک وقت ڈاؤن لوڈنگ کی سہولت کے ساتھ ملٹی پلیٹ فارم ویڈیو اور فائل ڈاؤن لوڈر۔',
+                textDirection: TextDirection.rtl,
               ),
               SizedBox(height: 16),
               Divider(),
@@ -153,7 +254,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                   SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'بنانے والے (Developer): Muhammad Bin Amjad',
+                      'Developer: Muhammad Bin Amjad',
                       style: TextStyle(fontWeight: FontWeight.w600),
                     ),
                   ),
@@ -166,7 +267,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                   SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'برانڈ (Brand): Digital RAZ',
+                      'Brand: Digital RAZ',
                       style: TextStyle(fontWeight: FontWeight.w600),
                     ),
                   ),
@@ -175,10 +276,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
               SizedBox(height: 8),
               Row(
                 children: [
-                  Icon(Icons.devices_rounded, size: 20),
+                  Icon(Icons.all_inclusive_rounded, size: 20),
                   SizedBox(width: 8),
                   Expanded(
-                    child: Text('پلیٹ فارم: Windows (.exe) & Android (.apk)'),
+                    child: Text('Mode: Unlimited Simultaneous Downloads'),
                   ),
                 ],
               ),
@@ -233,7 +334,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                           ),
                           if (media.duration != null)
                             Text(
-                              'دورانیہ: ${_formatDuration(media.duration!)} • ${media.sourceType.name.toUpperCase()}',
+                              'Duration: ${_formatDuration(media.duration!)} • ${media.sourceType.name.toUpperCase()}',
                               style: Theme.of(context).textTheme.bodySmall,
                             ),
                         ],
@@ -243,7 +344,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                 ),
                 const Divider(height: 24),
                 const Text(
-                  'معیار اور فارمیٹ منتخب کریں (Select Quality / Audio Only):',
+                  'معیار اور فارمیٹ منتخب کریں:',
+                  textDirection: TextDirection.rtl,
                   style: TextStyle(fontWeight: FontWeight.w600),
                 ),
                 const SizedBox(height: 10),
@@ -274,7 +376,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                             style: const TextStyle(fontWeight: FontWeight.w600),
                           ),
                           subtitle: Text(
-                            'سائز: $sizeLabel • فارمیٹ: ${opt.format.toUpperCase()}',
+                            'Size: $sizeLabel • Format: ${opt.format.toUpperCase()}',
                           ),
                           trailing: FilledButton.icon(
                             icon: const Icon(Icons.download_rounded, size: 18),
@@ -294,7 +396,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
                                   content: Text(
-                                    'ڈاؤن لوڈ قطار میں شامل کر دیا گیا: ${media.title}',
+                                    'ڈاؤن لوڈ فوری شروع ہو گیا: ${media.title}',
+                                    textDirection: TextDirection.rtl,
                                   ),
                                 ),
                               );
@@ -330,8 +433,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
       appBar: AppBar(
         title: const Row(
           children: [
-            Icon(Icons.bolt_rounded, color: Colors.amber),
-            SizedBox(width: 8),
+            MbaBrandLogoIcon(size: 36),
+            SizedBox(width: 10),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -339,7 +442,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                 children: [
                   Text(
                     'MBA Fast Downloader',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17),
                     overflow: TextOverflow.ellipsis,
                   ),
                   Text(
@@ -355,8 +458,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
         actions: [
           if (isWideScreen)
             const Chip(
-              avatar: Icon(Icons.verified_rounded, size: 16),
-              label: Text('Digital RAZ • 100% Ad-Free'),
+              avatar: Icon(Icons.all_inclusive_rounded, size: 16),
+              label: Text('Unlimited • 100% Ad-Free'),
               visualDensity: VisualDensity.compact,
             ),
           const SizedBox(width: 4),
@@ -455,6 +558,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
 
   Widget _buildActiveDownloadsTab(
       AppSettingsState settings, List<DownloadTaskItem> activeTasks) {
+    final queueLabel = settings.unlimitedConcurrentDownloads
+        ? 'Unlimited (لا محدود)'
+        : 'Max ${settings.maxConcurrentDownloads}';
+
     return Padding(
       padding: const EdgeInsets.all(16.0),
       child: Column(
@@ -463,51 +570,70 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
           Card(
             elevation: 2,
             child: Padding(
-              padding: const EdgeInsets.all(16.0),
+              padding: const EdgeInsets.all(14.0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: _urlController,
-                          decoration: InputDecoration(
-                            hintText:
-                                'لنک پیسٹ کریں (YouTube, Facebook, Direct MP4/WebM, HLS)...',
-                            prefixIcon: const Icon(Icons.link_rounded),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
+                  TextField(
+                    controller: _urlController,
+                    textDirection: TextDirection.ltr,
+                    maxLines: 2,
+                    minLines: 1,
+                    decoration: InputDecoration(
+                      hintText:
+                          'Paste 1 or multiple video links (YouTube, FB, TikTok, Instagram, X, MP4)...',
+                      prefixIcon: const Icon(Icons.link_rounded),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      suffixIcon: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (_urlController.text.isNotEmpty)
+                            IconButton(
+                              tooltip: 'Clear',
+                              icon: const Icon(Icons.clear_rounded),
+                              onPressed: () => setState(() {
+                                _urlController.clear();
+                                _analyzedMedia = null;
+                              }),
                             ),
-                            suffixIcon: IconButton(
-                              tooltip: 'Paste from Clipboard',
-                              icon: const Icon(Icons.content_paste_rounded),
-                              onPressed: _pasteFromClipboard,
-                            ),
+                          IconButton(
+                            tooltip: 'Paste from Clipboard',
+                            icon: const Icon(Icons.content_paste_rounded),
+                            onPressed: _pasteFromClipboard,
                           ),
-                          onSubmitted: (_) => _analyzeLink(),
+                        ],
+                      ),
+                    ),
+                    onChanged: (_) => setState(() {}),
+                    onSubmitted: (_) => _analyzeLink(),
+                  ),
+                  const SizedBox(height: 10),
+                  FilledButton.icon(
+                    onPressed: _isAnalyzing ? null : _analyzeLink,
+                    icon: _isAnalyzing
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                            ),
+                          )
+                        : const Icon(Icons.bolt_rounded),
+                    label: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      child: Text(
+                        _isAnalyzing
+                            ? 'ویڈیو لنک چیک ہو رہا ہے...'
+                            : 'لنک چیک کریں اور ڈاؤن لوڈ کریں',
+                        textDirection: TextDirection.rtl,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15,
                         ),
                       ),
-                      const SizedBox(width: 12),
-                      FilledButton.icon(
-                        onPressed: _isAnalyzing ? null : _analyzeLink,
-                        icon: _isAnalyzing
-                            ? const SizedBox(
-                                width: 18,
-                                height: 18,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              )
-                            : const Icon(Icons.search_rounded),
-                        label: Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          child: Text(
-                            _isAnalyzing ? 'پہچان جاری...' : 'لنک چیک کریں',
-                          ),
-                        ),
-                      ),
-                    ],
+                    ),
                   ),
                   if (_clipboardSuggestion != null) ...[
                     const SizedBox(height: 10),
@@ -539,37 +665,40 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                   ],
                   if (_analyzedMedia != null && !_analyzedMedia!.isSupported) ...[
                     const SizedBox(height: 12),
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: const Color(0x1FFF5252),
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: Colors.redAccent),
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.warning_amber_rounded,
-                              color: Colors.redAccent),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Text(
-                              _analyzedMedia!.unsupportedReason ??
-                                  'یہ لنک ڈاؤن لوڈ کے لیے معاون نہیں ہے۔',
-                              style: const TextStyle(color: Colors.redAccent),
+                    Directionality(
+                      textDirection: TextDirection.rtl,
+                      child: Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: const Color(0x1FFF5252),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: Colors.redAccent),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.warning_amber_rounded,
+                                color: Colors.redAccent),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                _analyzedMedia!.unsupportedReason ??
+                                    'یہ لنک ڈاؤن لوڈ کے لیے معاون نہیں ہے۔',
+                                style: const TextStyle(color: Colors.redAccent),
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
                   ],
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 10),
                   Row(
                     children: [
                       const Icon(Icons.folder_open_rounded, size: 18),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          'محفوظ فولڈر: ${settings.saveDirectory.isEmpty ? "Default Downloads" : settings.saveDirectory}',
+                          'Save Folder: ${settings.saveDirectory.isEmpty ? "Default Downloads" : settings.saveDirectory}',
                           style: Theme.of(context).textTheme.bodySmall,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -588,19 +717,44 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
               ),
             ),
           ),
-          const SizedBox(height: 16),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          const SizedBox(height: 12),
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 8,
+            runSpacing: 4,
             children: [
               Text(
-                'ڈاؤن لوڈ قطار اور جاری فائلیں (${activeTasks.length})',
+                'جاری ڈاؤن لوڈز (${activeTasks.length})',
+                textDirection: TextDirection.rtl,
                 style: Theme.of(context).textTheme.titleMedium?.copyWith(
                       fontWeight: FontWeight.bold,
                     ),
               ),
-              Text(
-                'متوازی کنکشنز: ${settings.maxParallelChunksPerFile}x • بیک وقت فائلیں: ${settings.maxConcurrentDownloads}',
-                style: Theme.of(context).textTheme.bodySmall,
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (activeTasks.isNotEmpty) ...[
+                    TextButton.icon(
+                      onPressed: () => ref
+                          .read(downloadQueueProvider.notifier)
+                          .resumeAllDownloads(),
+                      icon: const Icon(Icons.play_arrow_rounded, size: 18),
+                      label: const Text('سب چلائیں'),
+                    ),
+                    TextButton.icon(
+                      onPressed: () => ref
+                          .read(downloadQueueProvider.notifier)
+                          .pauseAllDownloads(),
+                      icon: const Icon(Icons.pause_rounded, size: 18),
+                      label: const Text('سب روکیں'),
+                    ),
+                  ],
+                  Text(
+                    'Speed: ${settings.maxParallelChunksPerFile}x • Mode: $queueLabel',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
               ),
             ],
           ),
@@ -608,8 +762,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
           Expanded(
             child: activeTasks.isEmpty
                 ? const Center(
-                    child: Text(
-                      'ابھی کوئی ڈاؤن لوڈ جاری نہیں ہے۔ اوپر لنک پیسٹ کر کے آغاز کریں۔',
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        MbaBrandLogoIcon(size: 56),
+                        SizedBox(height: 12),
+                        Text(
+                          'ابھی کوئی ڈاؤن لوڈ جاری نہیں ہے۔ ایک یا بیک وقت جتنے چاہیں لنکس پیسٹ کر کے ڈاؤن لوڈ کریں۔',
+                          textDirection: TextDirection.rtl,
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
                     ),
                   )
                 : ListView.separated(
@@ -661,7 +824,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                         overflow: TextOverflow.ellipsis,
                       ),
                       Text(
-                        '${task.qualityLabel} • ${task.formattedSize} • ${task.supportsRangeResume ? "${task.parallelChunks}x Fast Range" : "Single Stream"}',
+                        '${task.qualityLabel} • ${task.formattedSize} • ${task.supportsRangeResume ? "${task.parallelChunks}x Fast Range" : "Direct Stream"}',
                         style: Theme.of(context).textTheme.bodySmall,
                       ),
                     ],
@@ -699,19 +862,22 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  task.status == DownloadStatus.failed
-                      ? 'خرابی: ${task.errorMessage ?? "Download failed"}'
-                      : '${task.status.name.toUpperCase()} • ${task.formattedProgressPercent}',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: task.status == DownloadStatus.failed
-                        ? Colors.redAccent
-                        : null,
+                Expanded(
+                  child: Text(
+                    task.status == DownloadStatus.failed
+                        ? 'Error: ${task.errorMessage ?? "Download failed"}'
+                        : '${task.status.name.toUpperCase()} • ${task.formattedProgressPercent}',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: task.status == DownloadStatus.failed
+                          ? Colors.redAccent
+                          : null,
+                    ),
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
                 Text(
-                  'رفتار: ${task.formattedSpeed} • باقی وقت: ${task.formattedEta}',
+                  '${task.formattedSpeed} • ETA: ${task.formattedEta}',
                   style: const TextStyle(fontSize: 12),
                 ),
               ],
@@ -726,7 +892,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     final notifier = ref.read(downloadQueueProvider.notifier);
     if (completedTasks.isEmpty) {
       return const Center(
-        child: Text('ابھی تک کوئی فائل مکمل نہیں ہوئی۔'),
+        child: Text(
+          'ابھی تک کوئی فائل مکمل نہیں ہوئی۔',
+          textDirection: TextDirection.rtl,
+        ),
       );
     }
     return Column(
@@ -738,6 +907,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
             children: [
               Text(
                 'مکمل شدہ ڈاؤن لوڈ ہسٹری (${completedTasks.length})',
+                textDirection: TextDirection.rtl,
                 style: const TextStyle(fontWeight: FontWeight.bold),
               ),
               TextButton.icon(
@@ -794,6 +964,50 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
       padding: const EdgeInsets.all(16),
       children: [
         SwitchListTile(
+          secondary: const Icon(Icons.all_inclusive_rounded),
+          title: const Text(
+            'ان لمیٹڈ بیک وقت ڈاؤن لوڈز (Unlimited Simultaneous Downloads)',
+          ),
+          subtitle: const Text(
+            'فعال ہونے پر جتنی بھی ویڈیوز لگائیں گے وہ سب ایک ہی وقت میں بغیر انتظار کے ڈاؤن لوڈ ہوں گی',
+          ),
+          value: settings.unlimitedConcurrentDownloads,
+          onChanged: (v) => notifier.setUnlimitedConcurrentDownloads(v),
+        ),
+        const Divider(),
+        if (!settings.unlimitedConcurrentDownloads) ...[
+          ListTile(
+            leading: const Icon(Icons.queue_play_next_rounded),
+            title: Text(
+              'بیک وقت ڈاؤن لوڈز کی زیادہ سے زیادہ تعداد: ${settings.maxConcurrentDownloads} فائلیں',
+            ),
+            subtitle: Slider(
+              value: settings.maxConcurrentDownloads.toDouble(),
+              min: 1,
+              max: 50,
+              divisions: 49,
+              label: '${settings.maxConcurrentDownloads} Files',
+              onChanged: (val) => notifier.updateMaxConcurrent(val.round()),
+            ),
+          ),
+          const Divider(),
+        ],
+        ListTile(
+          leading: const Icon(Icons.speed_rounded),
+          title: Text(
+            'فی فائل متوازی رفتار کنکشنز (Parallel Speed Chunks): ${settings.maxParallelChunksPerFile}x',
+          ),
+          subtitle: Slider(
+            value: settings.maxParallelChunksPerFile.toDouble(),
+            min: 1,
+            max: 16,
+            divisions: 15,
+            label: '${settings.maxParallelChunksPerFile}x Chunks',
+            onChanged: (val) => notifier.updateMaxParallelChunks(val.round()),
+          ),
+        ),
+        const Divider(),
+        SwitchListTile(
           title: const Text('ڈارک موڈ (Dark Mode)'),
           subtitle: const Text(
               'سادہ، اشتہارات سے پاک اور آنکھوں کے لیے آرام دہ ڈیزائن'),
@@ -817,35 +1031,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
             child: const Text('فولڈر بدلیں'),
           ),
         ),
-        const Divider(),
-        ListTile(
-          leading: const Icon(Icons.speed_rounded),
-          title: Text(
-            'متوازی ڈاؤن لوڈ حصے (Parallel Chunks per File): ${settings.maxParallelChunksPerFile}',
-          ),
-          subtitle: Slider(
-            value: settings.maxParallelChunksPerFile.toDouble(),
-            min: 1,
-            max: 8,
-            divisions: 7,
-            label: '${settings.maxParallelChunksPerFile} Chunks',
-            onChanged: (val) => notifier.updateMaxParallelChunks(val.round()),
-          ),
-        ),
-        ListTile(
-          leading: const Icon(Icons.queue_play_next_rounded),
-          title: Text(
-            'بیک وقت ڈاؤن لوڈز کی تعداد (Max Concurrent Files): ${settings.maxConcurrentDownloads}',
-          ),
-          subtitle: Slider(
-            value: settings.maxConcurrentDownloads.toDouble(),
-            min: 1,
-            max: 6,
-            divisions: 5,
-            label: '${settings.maxConcurrentDownloads} Files',
-            onChanged: (val) => notifier.updateMaxConcurrent(val.round()),
-          ),
-        ),
         const Divider(height: 32),
         const Card(
           child: Padding(
@@ -855,8 +1040,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
               children: [
                 Row(
                   children: [
-                    Icon(Icons.verified_rounded, color: Colors.teal),
-                    SizedBox(width: 8),
+                    MbaBrandLogoIcon(size: 32),
+                    SizedBox(width: 10),
                     Text(
                       'ڈویلپر اور برانڈ (Developer & Brand)',
                       style: TextStyle(
@@ -868,17 +1053,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                 ),
                 SizedBox(height: 12),
                 Text(
-                  'بنانے والے (Creator): Muhammad Bin Amjad',
+                  'Creator: Muhammad Bin Amjad',
                   style: TextStyle(fontWeight: FontWeight.w600),
                 ),
                 SizedBox(height: 4),
                 Text(
-                  'برانڈ (Brand): Digital RAZ',
+                  'Brand: Digital RAZ',
                   style: TextStyle(fontWeight: FontWeight.w600),
                 ),
                 SizedBox(height: 4),
                 Text(
-                  'ایڈیشن: MBA Fast Downloader v1.0.0 (100% Ad-Free)',
+                  'Edition: MBA Fast Downloader v1.2.0 (Unlimited Edition • 100% Ad-Free)',
                 ),
               ],
             ),
