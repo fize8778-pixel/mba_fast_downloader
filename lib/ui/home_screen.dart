@@ -22,6 +22,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   bool _isAnalyzing = false;
   AnalyzedMediaResult? _analyzedMedia;
 
+  static const String developerName = 'Muhammad Bin Amjad';
+  static const String brandName = 'Digital RAZ';
+
   @override
   void initState() {
     super.initState();
@@ -114,6 +117,84 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     }
   }
 
+  void _showAboutDeveloperDialog() {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(18),
+          ),
+          title: const Row(
+            children: [
+              Icon(Icons.bolt_rounded, color: Colors.amber, size: 28),
+              SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'MBA Fast Downloader',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
+          ),
+          content: const Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'تیز رفتار، اشتہارات سے پاک (100% Ad-Free) ملٹی پلیٹ فارم ویڈیو اور فائل ڈاؤن لوڈر برائے ونڈوز اور اینڈرائیڈ۔',
+              ),
+              SizedBox(height: 16),
+              Divider(),
+              SizedBox(height: 8),
+              Row(
+                children: [
+                  Icon(Icons.person_rounded, size: 20),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'بنانے والے (Developer): Muhammad Bin Amjad',
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ],
+              ),
+              SizedBox(height: 8),
+              Row(
+                children: [
+                  Icon(Icons.verified_rounded, size: 20, color: Colors.teal),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'برانڈ (Brand): Digital RAZ',
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ],
+              ),
+              SizedBox(height: 8),
+              Row(
+                children: [
+                  Icon(Icons.devices_rounded, size: 20),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text('پلیٹ فارم: Windows (.exe) & Android (.apk)'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          actions: [
+            FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('ٹھیک ہے'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   void _showQualitySelectionSheet(AnalyzedMediaResult media) {
     showModalBottomSheet(
       context: context,
@@ -192,7 +273,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                             opt.label,
                             style: const TextStyle(fontWeight: FontWeight.w600),
                           ),
-                          subtitle: Text('سائز: $sizeLabel • فارمیٹ: ${opt.format.toUpperCase()}'),
+                          subtitle: Text(
+                            'سائز: $sizeLabel • فارمیٹ: ${opt.format.toUpperCase()}',
+                          ),
                           trailing: FilledButton.icon(
                             icon: const Icon(Icons.download_rounded, size: 18),
                             label: const Text('ڈاؤن لوڈ'),
@@ -249,19 +332,39 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
           children: [
             Icon(Icons.bolt_rounded, color: Colors.amber),
             SizedBox(width: 8),
-            Text(
-              'MBA Fast Downloader',
-              style: TextStyle(fontWeight: FontWeight.bold),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'MBA Fast Downloader',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  Text(
+                    'Digital RAZ • Muhammad Bin Amjad',
+                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
             ),
           ],
         ),
         actions: [
-          const Chip(
-            avatar: Icon(Icons.shield_outlined, size: 16),
-            label: Text('100% Ad-Free'),
-            visualDensity: VisualDensity.compact,
+          if (isWideScreen)
+            const Chip(
+              avatar: Icon(Icons.verified_rounded, size: 16),
+              label: Text('Digital RAZ • 100% Ad-Free'),
+              visualDensity: VisualDensity.compact,
+            ),
+          const SizedBox(width: 4),
+          IconButton(
+            tooltip: 'About Developer ($developerName - $brandName)',
+            onPressed: _showAboutDeveloperDialog,
+            icon: const Icon(Icons.info_outline_rounded),
           ),
-          const SizedBox(width: 8),
           IconButton(
             tooltip: 'Toggle Dark / Light Mode',
             onPressed: () =>
@@ -518,6 +621,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                     },
                   ),
           ),
+          const SizedBox(height: 8),
+          const Center(
+            child: Text(
+              'Powered by Digital RAZ • Developed by Muhammad Bin Amjad',
+              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500),
+            ),
+          ),
         ],
       ),
     );
@@ -685,7 +795,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
       children: [
         SwitchListTile(
           title: const Text('ڈارک موڈ (Dark Mode)'),
-          subtitle: const Text('سادہ، اشتہارات سے پاک اور آنکھوں کے لیے آرام دہ ڈیزائن'),
+          subtitle: const Text(
+              'سادہ، اشتہارات سے پاک اور آنکھوں کے لیے آرام دہ ڈیزائن'),
           value: settings.themeMode == ThemeMode.dark,
           onChanged: (_) => notifier.toggleThemeMode(),
         ),
@@ -733,6 +844,44 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
             divisions: 5,
             label: '${settings.maxConcurrentDownloads} Files',
             onChanged: (val) => notifier.updateMaxConcurrent(val.round()),
+          ),
+        ),
+        const Divider(height: 32),
+        const Card(
+          child: Padding(
+            padding: EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.verified_rounded, color: Colors.teal),
+                    SizedBox(width: 8),
+                    Text(
+                      'ڈویلپر اور برانڈ (Developer & Brand)',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
+                  ],
+                ),
+                SizedBox(height: 12),
+                Text(
+                  'بنانے والے (Creator): Muhammad Bin Amjad',
+                  style: TextStyle(fontWeight: FontWeight.w600),
+                ),
+                SizedBox(height: 4),
+                Text(
+                  'برانڈ (Brand): Digital RAZ',
+                  style: TextStyle(fontWeight: FontWeight.w600),
+                ),
+                SizedBox(height: 4),
+                Text(
+                  'ایڈیشن: MBA Fast Downloader v1.0.0 (100% Ad-Free)',
+                ),
+              ],
+            ),
           ),
         ),
       ],
