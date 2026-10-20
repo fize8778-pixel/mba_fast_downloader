@@ -25,7 +25,7 @@ jobs:
           channel: 'stable'
           cache: true
 
-      - name: Generate Native Android Runner & Apply Share Permissions
+      - name: Generate Native Android Runner, Share Permissions & Professional App Icon
         run: |
           sed -i '/permission_handler/d' pubspec.yaml
           flutter create --platforms=android --org com.mba.fastdownloader --project-name mba_fast_downloader .
@@ -33,6 +33,68 @@ jobs:
           cp android_custom/AndroidManifest.xml android/app/src/main/AndroidManifest.xml
           mkdir -p android/app/src/main/kotlin/com/mba/fastdownloader/mba_fast_downloader
           cp android_custom/MainActivity.kt android/app/src/main/kotlin/com/mba/fastdownloader/mba_fast_downloader/MainActivity.kt
+          rm -rf android/app/src/main/res/mipmap-anydpi-v26
+          python3 - << 'PYEOF'
+          import math, os, struct, zlib
+
+          def render_mba_icon_png(size):
+              width = height = size
+              raw_rows = bytearray()
+              cx = cy = size / 2.0
+              r_outer = size * 0.46
+              corner = size * 0.22
+              for y in range(height):
+                  raw_rows.append(0)
+                  ny = (y - cy) / (size * 0.5)
+                  for x in range(width):
+                      nx = (x - cx) / (size * 0.5)
+                      dx = max(abs(x - cx) - (r_outer - corner), 0.0)
+                      dy = max(abs(y - cy) - (r_outer - corner), 0.0)
+                      dist = math.hypot(dx, dy) - corner
+                      if dist > 1.0:
+                          raw_rows.extend((0, 0, 0, 0))
+                          continue
+                      alpha = 255 if dist < 0.0 else int(max(0.0, 1.0 - dist) * 255)
+                      t = y / float(height)
+                      r = int(8 * (1 - t) + 6 * t)
+                      g = int(78 * (1 - t) + 22 * t)
+                      b = int(76 * (1 - t) + 46 * t)
+                      if -size * 0.035 <= dist <= 0.0:
+                          rim = max(0.0, min(1.0, 1.0 - abs(dist + size * 0.0175) / (size * 0.0175 + 1e-5)))
+                          r = int(r * (1 - rim) + 0 * rim)
+                          g = int(g * (1 - rim) + 235 * rim)
+                          b = int(b * (1 - rim) + 215 * rim)
+                      in_shaft = (abs(nx) <= 0.15) and (-0.50 <= ny <= 0.06)
+                      in_head = (0.02 <= ny <= 0.46) and (abs(nx) <= (0.46 - ny) * 0.95)
+                      in_play = (-0.35 <= ny <= -0.11) and (nx >= -0.05) and ((nx + 0.05) <= (0.12 - abs(ny + 0.23)) * 1.15)
+                      bolt1 = (-0.44 <= ny <= 0.0) and abs(nx - (0.18 - ny * 0.38)) <= (0.08 * (1.0 + (ny + 0.44)))
+                      bolt2 = (-0.05 <= ny <= 0.42) and abs(nx - (0.20 - ny * 0.42)) <= (0.075 * (1.0 - (ny + 0.05) / 0.52))
+                      if bolt1 or bolt2:
+                          r, g, b = 255, int(215 - ny * 50), 45
+                      elif in_play:
+                          r, g, b = 255, 210, 55
+                      elif in_shaft or in_head:
+                          r, g, b = (0, 225, 240) if nx < 0 else (0, 175, 205)
+                      raw_rows.extend((r, g, b, alpha))
+              def chunk(tag, data):
+                  return struct.pack(">I", len(data)) + tag + data + struct.pack(">I", zlib.crc32(tag + data) & 0xffffffff)
+              ihdr = struct.pack(">IIBBBBB", width, height, 8, 6, 0, 0, 0)
+              return b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", ihdr) + chunk(b"IDAT", zlib.compress(bytes(raw_rows), 9)) + chunk(b"IEND", b"")
+
+          densities = {
+              "mipmap-mdpi": 48,
+              "mipmap-hdpi": 72,
+              "mipmap-xhdpi": 96,
+              "mipmap-xxhdpi": 144,
+              "mipmap-xxxhdpi": 192,
+          }
+          for folder, px in densities.items():
+              out_dir = os.path.join("android/app/src/main/res", folder)
+              os.makedirs(out_dir, exist_ok=True)
+              png_bytes = render_mba_icon_png(px)
+              with open(os.path.join(out_dir, "ic_launcher.png"), "wb") as f:
+                  f.write(png_bytes)
+          PYEOF
 
       - name: Install Dependencies & Upgrade Android compileSdk to 36
         run: |
@@ -92,7 +154,7 @@ jobs:
           channel: 'stable'
           cache: true
 
-      - name: Generate Native Windows C++ Runner & Fix VS2026 Coroutine Flag
+      - name: Generate Native Windows C++ Runner, Professional .ICO Icon & Fix VS2026 Flag
         run: |
           (Get-Content pubspec.yaml) | Where-Object { $_ -notmatch 'permission_handler' } | Set-Content pubspec.yaml
           flutter create --platforms=windows --org com.mba.fastdownloader --project-name mba_fast_downloader .
@@ -100,6 +162,57 @@ jobs:
           if (Test-Path windows/CMakeLists.txt) {
             (Get-Content windows/CMakeLists.txt) -replace 'include\(flutter/generated_plugins\.cmake\)', "add_compile_definitions(_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS)`ninclude(flutter/generated_plugins.cmake)" | Set-Content windows/CMakeLists.txt
           }
+          python -c "
+          import math, os, struct, zlib
+          def render_mba_icon_png(size):
+              width = height = size
+              raw_rows = bytearray()
+              cx = cy = size / 2.0
+              r_outer = size * 0.46
+              corner = size * 0.22
+              for y in range(height):
+                  raw_rows.append(0)
+                  ny = (y - cy) / (size * 0.5)
+                  for x in range(width):
+                      nx = (x - cx) / (size * 0.5)
+                      dx = max(abs(x - cx) - (r_outer - corner), 0.0)
+                      dy = max(abs(y - cy) - (r_outer - corner), 0.0)
+                      dist = math.hypot(dx, dy) - corner
+                      if dist > 1.0:
+                          raw_rows.extend((0, 0, 0, 0))
+                          continue
+                      alpha = 255 if dist < 0.0 else int(max(0.0, 1.0 - dist) * 255)
+                      t = y / float(height)
+                      r, g, b = int(8*(1-t)+6*t), int(78*(1-t)+22*t), int(76*(1-t)+46*t)
+                      if -size * 0.035 <= dist <= 0.0:
+                          rim = max(0.0, min(1.0, 1.0 - abs(dist + size * 0.0175) / (size * 0.0175 + 1e-5)))
+                          r, g, b = int(r*(1-rim)), int(g*(1-rim)+235*rim), int(b*(1-rim)+215*rim)
+                      in_shaft = (abs(nx) <= 0.15) and (-0.50 <= ny <= 0.06)
+                      in_head = (0.02 <= ny <= 0.46) and (abs(nx) <= (0.46 - ny) * 0.95)
+                      in_play = (-0.35 <= ny <= -0.11) and (nx >= -0.05) and ((nx + 0.05) <= (0.12 - abs(ny + 0.23)) * 1.15)
+                      bolt1 = (-0.44 <= ny <= 0.0) and abs(nx - (0.18 - ny * 0.38)) <= (0.08 * (1.0 + (ny + 0.44)))
+                      bolt2 = (-0.05 <= ny <= 0.42) and abs(nx - (0.20 - ny * 0.42)) <= (0.075 * (1.0 - (ny + 0.05) / 0.52))
+                      if bolt1 or bolt2: r, g, b = 255, int(215 - ny * 50), 45
+                      elif in_play: r, g, b = 255, 210, 55
+                      elif in_shaft or in_head: r, g, b = (0, 225, 240) if nx < 0 else (0, 175, 205)
+                      raw_rows.extend((r, g, b, alpha))
+              def chunk(tag, data):
+                  return struct.pack('>I', len(data)) + tag + data + struct.pack('>I', zlib.crc32(tag + data) & 0xffffffff)
+              ihdr = struct.pack('>IIBBBBB', width, height, 8, 6, 0, 0, 0)
+              return b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', ihdr) + chunk(b'IDAT', zlib.compress(bytes(raw_rows), 9)) + chunk(b'IEND', b'')
+          sizes = [256, 128, 64, 48, 32, 16]
+          pngs = [render_mba_icon_png(s) for s in sizes]
+          ico_header = struct.pack('<HHH', 0, 1, len(sizes))
+          offset = 6 + 16 * len(sizes)
+          entries = bytearray()
+          for s, data in zip(sizes, pngs):
+              w = 0 if s == 256 else s
+              entries.extend(struct.pack('<BBBBHHII', w, w, 0, 0, 1, 32, len(data), offset))
+              offset += len(data)
+          os.makedirs('windows/runner/resources', exist_ok=True)
+          with open('windows/runner/resources/app_icon.ico', 'wb') as f:
+              f.write(ico_header + bytes(entries) + b''.join(pngs))
+          "
 
       - name: Install Dependencies
         run: flutter pub get
