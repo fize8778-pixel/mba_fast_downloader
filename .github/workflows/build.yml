@@ -1,0 +1,82 @@
+name: Build MBA Fast Downloader (Windows .exe & Android .apk)
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  test_and_build_android:
+    name: Verify Code & Build Android APK
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Set up Flutter SDK
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Generate Native Android Runner & Apply Share Permissions
+        run: |
+          flutter create --platforms=android --org com.mba.fastdownloader --project-name mba_fast_downloader .
+          cp android_custom/AndroidManifest.xml android/app/src/main/AndroidManifest.xml
+          mkdir -p android/app/src/main/kotlin/com/mba/fastdownloader
+          cp android_custom/MainActivity.kt android/app/src/main/kotlin/com/mba/fastdownloader/MainActivity.kt
+
+      - name: Install Dependencies
+        run: flutter pub get
+
+      - name: Run Static Code Analysis (Self-Check)
+        run: flutter analyze --no-fatal-infos
+
+      - name: Run Automated Unit Tests (Self-Check)
+        run: flutter test
+
+      - name: Build Release Android APK
+        run: flutter build apk --release
+
+      - name: Upload Android APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MBA-Fast-Downloader-Android-APK
+          path: build/app/outputs/flutter-apk/app-release.apk
+
+  build_windows_exe:
+    name: Build Windows Desktop App (.exe)
+    runs-on: windows-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter SDK on Windows
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Generate Native Windows C++ Runner
+        run: flutter create --platforms=windows --org com.mba.fastdownloader --project-name mba_fast_downloader .
+
+      - name: Install Dependencies
+        run: flutter pub get
+
+      - name: Run Automated Unit Tests on Windows
+        run: flutter test
+
+      - name: Build Windows Release Executable (.exe)
+        run: flutter build windows --release
+
+      - name: Upload Windows Portable App (.exe + DLLs)
+        uses: actions/upload-artifact@v4
+        with:
+          name: MBA-Fast-Downloader-Windows-Portable
+          path: build/windows/x64/runner/Release/
