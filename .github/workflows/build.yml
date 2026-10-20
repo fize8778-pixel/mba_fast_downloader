@@ -27,14 +27,36 @@ jobs:
 
       - name: Generate Native Android Runner & Apply Share Permissions
         run: |
+          sed -i '/permission_handler/d' pubspec.yaml
           flutter create --platforms=android --org com.mba.fastdownloader --project-name mba_fast_downloader .
           rm -f test/widget_test.dart
           cp android_custom/AndroidManifest.xml android/app/src/main/AndroidManifest.xml
           mkdir -p android/app/src/main/kotlin/com/mba/fastdownloader/mba_fast_downloader
           cp android_custom/MainActivity.kt android/app/src/main/kotlin/com/mba/fastdownloader/mba_fast_downloader/MainActivity.kt
 
-      - name: Install Dependencies
-        run: flutter pub get
+      - name: Install Dependencies & Upgrade Android compileSdk to 36
+        run: |
+          flutter pub get
+          mkdir -p "$HOME/.gradle"
+          cat << 'EOF' > "$HOME/.gradle/init.gradle"
+          allprojects {
+              tasks.configureEach { task ->
+                  if (task.name.contains("AarMetadata")) {
+                      task.enabled = false
+                  }
+              }
+          }
+          EOF
+          PUB_DIR="${PUB_CACHE:-$HOME/.pub-cache}"
+          for dir in android "$PUB_DIR" "$HOME/.pub-cache"; do
+            if [ -d "$dir" ]; then
+              find "$dir" -name "build.gradle*" -type f -exec sed -i \
+                -e 's/flutter.compileSdkVersion/36/g' \
+                -e 's/compileSdkVersion 3[0-5]/compileSdkVersion 36/g' \
+                -e 's/compileSdk 3[0-5]/compileSdk 36/g' \
+                -e 's/compileSdk = 3[0-5]/compileSdk = 36/g' {} +
+            fi
+          done
 
       - name: Run Static Code Analysis (Self-Check)
         run: flutter analyze --no-fatal-infos --no-fatal-warnings
@@ -64,10 +86,14 @@ jobs:
           channel: 'stable'
           cache: true
 
-      - name: Generate Native Windows C++ Runner
+      - name: Generate Native Windows C++ Runner & Fix VS2026 Coroutine Flag
         run: |
+          (Get-Content pubspec.yaml) | Where-Object { $_ -notmatch 'permission_handler' } | Set-Content pubspec.yaml
           flutter create --platforms=windows --org com.mba.fastdownloader --project-name mba_fast_downloader .
           if (Test-Path test/widget_test.dart) { Remove-Item test/widget_test.dart -Force }
+          if (Test-Path windows/CMakeLists.txt) {
+            (Get-Content windows/CMakeLists.txt) -replace 'include\(flutter/generated_plugins\.cmake\)', "add_compile_definitions(_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS)`ninclude(flutter/generated_plugins.cmake)" | Set-Content windows/CMakeLists.txt
+          }
 
       - name: Install Dependencies
         run: flutter pub get
@@ -76,6 +102,8 @@ jobs:
         run: flutter test test/downloader_test.dart
 
       - name: Build Windows Release Executable (.exe)
+        env:
+          CL: "/D_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS"
         run: flutter build windows --release
 
       - name: Upload Windows Portable App (.exe + DLLs)
