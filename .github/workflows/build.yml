@@ -37,12 +37,15 @@ jobs:
       - name: Install Dependencies & Upgrade Android compileSdk to 36
         run: |
           flutter pub get
+          echo "flutter.compileSdkVersion=36" >> android/local.properties
           mkdir -p "$HOME/.gradle"
           cat << 'EOF' > "$HOME/.gradle/init.gradle"
           allprojects {
-              tasks.configureEach { task ->
-                  if (task.name.contains("AarMetadata")) {
-                      task.enabled = false
+              afterEvaluate { project ->
+                  if (project.hasProperty("android")) {
+                      project.android {
+                          compileSdkVersion 36
+                      }
                   }
               }
           }
@@ -51,10 +54,13 @@ jobs:
           for dir in android "$PUB_DIR" "$HOME/.pub-cache"; do
             if [ -d "$dir" ]; then
               find "$dir" -name "build.gradle*" -type f -exec sed -i \
-                -e 's/flutter.compileSdkVersion/36/g' \
+                -e 's/compileSdk = flutter.compileSdkVersion/compileSdk = 36/g' \
+                -e 's/compileSdk flutter.compileSdkVersion/compileSdk 36/g' \
+                -e 's/compileSdkVersion flutter.compileSdkVersion/compileSdkVersion 36/g' \
                 -e 's/compileSdkVersion 3[0-5]/compileSdkVersion 36/g' \
                 -e 's/compileSdk 3[0-5]/compileSdk 36/g' \
-                -e 's/compileSdk = 3[0-5]/compileSdk = 36/g' {} +
+                -e 's/compileSdk = 3[0-5]/compileSdk = 36/g' \
+                -e 's/?: 3[0-5]/?: 36/g' {} +
             fi
           done
 
