@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 class AppSettingsState {
   final ThemeMode themeMode;
   final String saveDirectory;
+  final bool unlimitedConcurrentDownloads;
   final int maxConcurrentDownloads;
   final int maxParallelChunksPerFile;
   final bool autoDetectClipboard;
@@ -17,8 +18,9 @@ class AppSettingsState {
   const AppSettingsState({
     this.themeMode = ThemeMode.dark,
     this.saveDirectory = '',
-    this.maxConcurrentDownloads = 3,
-    this.maxParallelChunksPerFile = 4,
+    this.unlimitedConcurrentDownloads = true,
+    this.maxConcurrentDownloads = 16,
+    this.maxParallelChunksPerFile = 8,
     this.autoDetectClipboard = true,
     this.lastDetectedClipboardUrl,
   });
@@ -26,6 +28,7 @@ class AppSettingsState {
   AppSettingsState copyWith({
     ThemeMode? themeMode,
     String? saveDirectory,
+    bool? unlimitedConcurrentDownloads,
     int? maxConcurrentDownloads,
     int? maxParallelChunksPerFile,
     bool? autoDetectClipboard,
@@ -34,6 +37,8 @@ class AppSettingsState {
     return AppSettingsState(
       themeMode: themeMode ?? this.themeMode,
       saveDirectory: saveDirectory ?? this.saveDirectory,
+      unlimitedConcurrentDownloads:
+          unlimitedConcurrentDownloads ?? this.unlimitedConcurrentDownloads,
       maxConcurrentDownloads:
           maxConcurrentDownloads ?? this.maxConcurrentDownloads,
       maxParallelChunksPerFile:
@@ -54,8 +59,10 @@ class AppSettingsNotifier extends StateNotifier<AppSettingsState> {
     final prefs = await SharedPreferences.getInstance();
     final isDark = prefs.getBool('is_dark_mode') ?? true;
     final savedDir = prefs.getString('save_directory');
-    final maxConc = prefs.getInt('max_concurrent_downloads') ?? 3;
-    final maxChunks = prefs.getInt('max_parallel_chunks') ?? 4;
+    final unlimitedConc =
+        prefs.getBool('unlimited_concurrent_downloads') ?? true;
+    final maxConc = prefs.getInt('max_concurrent_downloads') ?? 16;
+    final maxChunks = prefs.getInt('max_parallel_chunks') ?? 8;
     final autoClip = prefs.getBool('auto_detect_clipboard') ?? true;
 
     String defaultDir = savedDir ?? '';
@@ -66,8 +73,9 @@ class AppSettingsNotifier extends StateNotifier<AppSettingsState> {
     state = state.copyWith(
       themeMode: isDark ? ThemeMode.dark : ThemeMode.light,
       saveDirectory: defaultDir,
-      maxConcurrentDownloads: maxConc,
-      maxParallelChunksPerFile: maxChunks,
+      unlimitedConcurrentDownloads: unlimitedConc,
+      maxConcurrentDownloads: maxConc.clamp(1, 50),
+      maxParallelChunksPerFile: maxChunks.clamp(1, 16),
       autoDetectClipboard: autoClip,
     );
   }
@@ -119,15 +127,21 @@ class AppSettingsNotifier extends StateNotifier<AppSettingsState> {
     return null;
   }
 
+  Future<void> setUnlimitedConcurrentDownloads(bool unlimited) async {
+    state = state.copyWith(unlimitedConcurrentDownloads: unlimited);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('unlimited_concurrent_downloads', unlimited);
+  }
+
   Future<void> updateMaxConcurrent(int count) async {
-    final clamped = count.clamp(1, 6);
+    final clamped = count.clamp(1, 50);
     state = state.copyWith(maxConcurrentDownloads: clamped);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt('max_concurrent_downloads', clamped);
   }
 
   Future<void> updateMaxParallelChunks(int chunks) async {
-    final clamped = chunks.clamp(1, 8);
+    final clamped = chunks.clamp(1, 16);
     state = state.copyWith(maxParallelChunksPerFile: clamped);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt('max_parallel_chunks', clamped);
