@@ -439,7 +439,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: Colors.redAccent.withOpacity(0.12),
+                        color: const Color(0x1FFF5252),
                         borderRadius: BorderRadius.circular(10),
                         border: Border.all(color: Colors.redAccent),
                       ),
@@ -475,7 +475,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                         onPressed: () => ref
                             .read(appSettingsProvider.notifier)
                             .pickSaveDirectory(),
-                        icon: const Icon(Icons.edit_folder_upload_rounded,
+                        icon: const Icon(Icons.create_new_folder_rounded,
                             size: 18),
                         label: const Text('فولڈر بدلیں'),
                       ),
