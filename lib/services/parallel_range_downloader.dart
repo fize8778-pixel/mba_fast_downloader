@@ -48,17 +48,20 @@ class ChunkedRangeDownloader {
                 connectTimeout: const Duration(seconds: 25),
                 receiveTimeout: const Duration(minutes: 45),
                 followRedirects: true,
+                maxRedirects: 8,
                 headers: const {
                   'User-Agent':
-                      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) MBAFastDownloader/1.0',
+                      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+                  'Accept': '*/*',
                 },
               ),
             );
 
-  /// Calculates optimal byte ranges for parallel downloading.
   static List<ByteChunkRange> calculateByteRanges(
       int totalBytes, int requestedChunks) {
-    if (totalBytes <= 0 || requestedChunks <= 1 || totalBytes < 2 * 1024 * 1024) {
+    if (totalBytes <= 0 ||
+        requestedChunks <= 1 ||
+        totalBytes < 2 * 1024 * 1024) {
       return [
         ByteChunkRange(
           index: 0,
@@ -68,19 +71,19 @@ class ChunkedRangeDownloader {
       ];
     }
 
-    final chunkCount = requestedChunks.clamp(1, 8);
+    final chunkCount = requestedChunks.clamp(1, 16);
     final chunkSize = totalBytes ~/ chunkCount;
     final ranges = <ByteChunkRange>[];
 
     for (int i = 0; i < chunkCount; i++) {
       final start = i * chunkSize;
-      final end = (i == chunkCount - 1) ? (totalBytes - 1) : ((i + 1) * chunkSize - 1);
+      final end =
+          (i == chunkCount - 1) ? (totalBytes - 1) : ((i + 1) * chunkSize - 1);
       ranges.add(ByteChunkRange(index: i, startByte: start, endByte: end));
     }
     return ranges;
   }
 
-  /// Probes server headers for file size and Range support.
   Future<({String fileName, int totalBytes, bool supportsRange})> probeUrl(
       String url,
       {String? preferredFileName}) async {
@@ -93,7 +96,10 @@ class ChunkedRangeDownloader {
     try {
       final response = await _dio.head(
         url,
-        options: Options(headers: {'Range': 'bytes=0-0'}),
+        options: Options(
+          headers: {'Range': 'bytes=0-0'},
+          validateStatus: (status) => status != null && status < 400,
+        ),
       );
       final headers = response.headers;
       final contentRange = headers.value('content-range')?.toLowerCase() ?? '';
@@ -131,11 +137,11 @@ class ChunkedRangeDownloader {
     );
   }
 
-  /// Downloads a file using parallel HTTP Range chunks when supported, or single stream fallback.
   Future<void> startOrResumeDownload({
     required DownloadTaskItem task,
     required int maxParallelChunks,
-    required void Function(int downloaded, int total, double speedBps, int etaSec)
+    required void Function(
+            int downloaded, int total, double speedBps, int etaSec)
         onProgress,
     required void Function(String finalFilePath) onCompleted,
     required void Function(String errorMessage) onError,
@@ -146,7 +152,13 @@ class ChunkedRangeDownloader {
     }
 
     final finalFile = File(p.join(task.savePath, task.fileName));
-    final useParallel = task.supportsRangeResume &&
+    final lowerHost = Uri.tryParse(task.downloadUrl)?.host.toLowerCase() ?? '';
+    final isSignedSocialCdn = lowerHost.contains('fbcdn.net') ||
+        lowerHost.contains('tiktok') ||
+        lowerHost.contains('cdninstagram.com');
+
+    final useParallel = !isSignedSocialCdn &&
+        task.supportsRangeResume &&
         task.totalBytes >= 2 * 1024 * 1024 &&
         maxParallelChunks > 1;
 
@@ -177,7 +189,6 @@ class ChunkedRangeDownloader {
       chunks = calculateByteRanges(task.totalBytes, maxParallelChunks);
     }
 
-    // Verify existing part files on disk
     for (final chunk in chunks) {
       final partFile = File('${finalFile.path}.part${chunk.index}');
       if (await partFile.exists()) {
@@ -208,7 +219,8 @@ class ChunkedRangeDownloader {
           ? instantSpeed
           : (smoothedSpeed * 0.65) + (instantSpeed * 0.35);
 
-      final remaining = (task.totalBytes - totalDownloaded).clamp(0, task.totalBytes);
+      final remaining =
+          (task.totalBytes - totalDownloaded).clamp(0, task.totalBytes);
       final etaSec = smoothedSpeed > 1 ? (remaining / smoothedSpeed).round() : 0;
 
       onProgress(totalDownloaded, task.totalBytes, smoothedSpeed, etaSec);
@@ -257,7 +269,6 @@ class ChunkedRangeDownloader {
         }),
       );
 
-      // Save state if paused midway
       if (tokens.any((t) => t.isCancelled)) {
         await metaFile.writeAsString(
           jsonEncode(chunks.map((c) => c.toJson()).toList()),
@@ -265,7 +276,6 @@ class ChunkedRangeDownloader {
         return;
       }
 
-      // Verify all chunks completed and merge parts into final file
       if (chunks.every((c) => c.isComplete)) {
         final outSink = finalFile.openWrite(mode: FileMode.writeOnly);
         for (final chunk in chunks) {
@@ -277,7 +287,6 @@ class ChunkedRangeDownloader {
         await outSink.flush();
         await outSink.close();
 
-        // Cleanup part & meta files
         for (final chunk in chunks) {
           final partFile = File('${finalFile.path}.part${chunk.index}');
           if (await partFile.exists()) {
@@ -293,13 +302,19 @@ class ChunkedRangeDownloader {
       }
     } on DioException catch (e) {
       _taskTokens.remove(task.id);
-      await metaFile.writeAsString(
-        jsonEncode(chunks.map((c) => c.toJson()).toList()),
-      );
       if (CancelToken.isCancel(e)) {
+        await metaFile.writeAsString(
+          jsonEncode(chunks.map((c) => c.toJson()).toList()),
+        );
         return;
       }
-      onError(e.message ?? 'ڈاؤن لوڈ کے دوران نیٹ ورک کا مسئلہ پیش آیا۔');
+      await _downloadSingleStream(
+        task: task,
+        targetFile: finalFile,
+        onProgress: onProgress,
+        onCompleted: onCompleted,
+        onError: onError,
+      );
     } catch (e) {
       _taskTokens.remove(task.id);
       onError(e.toString());
@@ -309,7 +324,8 @@ class ChunkedRangeDownloader {
   Future<void> _downloadSingleStream({
     required DownloadTaskItem task,
     required File targetFile,
-    required void Function(int downloaded, int total, double speedBps, int etaSec)
+    required void Function(
+            int downloaded, int total, double speedBps, int etaSec)
         onProgress,
     required void Function(String finalFilePath) onCompleted,
     required void Function(String errorMessage) onError,
@@ -338,9 +354,9 @@ class ChunkedRangeDownloader {
       );
 
       final isResumed = response.statusCode == 206 && existingBytes > 0;
-      final contentLen =
-          int.tryParse(response.headers.value(Headers.contentLengthHeader) ?? '') ??
-              0;
+      final contentLen = int.tryParse(
+              response.headers.value(Headers.contentLengthHeader) ?? '') ??
+          0;
       final totalBytes = isResumed
           ? existingBytes + contentLen
           : (contentLen > 0 ? contentLen : task.totalBytes);
